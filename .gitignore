@@ -50,3 +50,16 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+*.vcxproj
+*.user
+*.sln
+*.buildinfo
+*.h
+*.ipch
+*.opendb
+*.db
+*.xml
+*.bin
+*.filters
+NixieClockCode/NixieClock/src/arduino folders read me.txt
+NixieClockCode/.vs/NixieClockCode/v16/.suo
