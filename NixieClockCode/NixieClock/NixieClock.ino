@@ -13,10 +13,9 @@ const int latchPin = 13;
 const int clockPin = 14;
 
 // Time Variables
-bool timeData[24] = {};
-String timeStamp = "";
+int currentTime[3] = {};
 int lastSync = 0;
-int syncInterval = 10;
+int syncInterval = 3600;
 
 // Time API
 const char* apiTarget = "http://worldtimeapi.org/api/timezone/Europe/London";
@@ -62,14 +61,17 @@ void loop() {
 	// Check current time progress.
 	if (serviceTick)
 	{
-		// Increment time and display.
+		// Increment time.
 		doTick();
 
-		Serial.println(inProgress);
+		//Serial.println(inProgress);
 		serviceTick = false;
 
 		lastSync += 1;
-		Serial.println(lastSync);
+		//Serial.println(lastSync);
+
+		// Output Time.
+		outputTime();
 	}
 
 	// Check Sync Interval.
@@ -86,6 +88,7 @@ void loop() {
 	}
 }
 
+// ISR for each second.
 void triggerTick()
 {
 	serviceTick = true;
@@ -95,37 +98,45 @@ void syncTime()
 {
 	inProgress = true;
 	// Get Time String.
-	timeStamp = getInternetTime();
+	String timeStamp = getInternetTime();
 	// Check Success.
 	if (timeStamp == "") {return;}
 	// Update sync status if successful.
 	lastSync = 0;
-	// Parse To 3-Byte array.
+
+	// Update Current Time.
+	parseTime(timeStamp, currentTime);
 
 	inProgress = false;
 }
 
+// Get Timestamp from internet.
 String getInternetTime()
 {
+	String timeStamp = "";
+
 	HTTPClient http;
 	http.begin(apiTarget);
 	// Perform Request.
 	int status = http.GET();
-	Serial.println(status);
+	//Serial.println(status);
 
-	if (status > 0)
+	if (status == 200)
 	{
 		const size_t bufferSize = JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(8) + 370;
 		DynamicJsonDocument jsonDocument(bufferSize);
 		deserializeJson(jsonDocument, http.getString());
 
 		// Get Timestamp.
-		timeStamp = jsonDocument["utc_datetime"].as<const char*>();
+		timeStamp = jsonDocument["datetime"].as<const char*>();
+		Serial.println(timeStamp);
+
+		// Parse HH:MM:SS.
+		timeStamp = timeStamp.substring(timeStamp.indexOf('T') + 1, timeStamp.indexOf('T') + 9);
 		Serial.println(timeStamp);
 	}
 	else
 	{
-		timeStamp = "";
 		Serial.println("Error.");
 	}
 	return timeStamp;
@@ -133,19 +144,101 @@ String getInternetTime()
 
 void doTick()
 {
+	bool carry = false;
 
-}
-
-void convertToBits()
-{
-
-}
-
-void writeTime(bool* timeData) 
-{
-	for (int i = 0; i < 24; i++)
+	// Seconds.
+	currentTime[2]++;
+	if (currentTime[2] > 59)
 	{
-		if (timeData[i])
+		carry = true;
+		currentTime[2] = 0;
+	}
+
+	// Minutes.
+	if ((currentTime[2] == 0) && carry)
+	{
+		carry = false;
+		currentTime[1]++;
+		if (currentTime[1] > 59)
+		{
+			carry = true;
+			currentTime[1] = 0;
+		}
+	}
+
+	// Hours.
+	if ((currentTime[1] == 0) && carry)
+	{
+		currentTime[0]++;
+		if (currentTime[0] > 23)
+		{
+			currentTime[0] = 0;
+		}
+	}
+}
+
+void parseTime(String timestamp, int* result)
+{
+	for (size_t i = 0; i < 9; i += 3)
+	{
+		// Check Char
+		String part = timestamp.substring(i, i + 2);
+
+		// Get Value.
+		result[i/3] = part.toInt();
+	}
+}
+
+void outputTime()
+{
+	bool dataBits[24] = {};
+	int value = 0;
+	int addr = 0;
+
+	// Convert Current Time
+	for (size_t i = 0; i < 3; i++)
+	{
+		// Get Section.
+		String s = (String)currentTime[i];
+		// Pad.
+		if (currentTime[i] < 10)
+		{
+			s = "0" + s;
+		}
+
+		// Split into Digits
+		for (size_t j = 0; j < 2; j++)
+		{
+			// Get Digit
+			value = s.substring(j, j+1).toInt();
+			
+			// Convert to bits.
+			dataBits[(addr * 4)] = (value >> 3) & 0x1;
+			dataBits[(addr * 4) + 1] = (value >> 2) & 0x1;
+			dataBits[(addr * 4) + 2] = (value >> 1) & 0x1;
+			dataBits[(addr * 4) + 3] = value & 0x1;
+
+			addr++;
+		}
+	}
+
+	// Debug Output.
+	for (size_t i = 0; i < 24; i++)
+	{
+		Serial.print(dataBits[i]);
+	}
+
+	Serial.println("");
+
+	// Output.
+	writeData(dataBits);
+}
+
+void writeData(bool* writeData)
+{
+	for (int i = 23; i >= 0; i--)
+	{
+		if (writeData[i])
 		{
 			digitalWrite(dataPin, HIGH);
 		}
@@ -156,14 +249,12 @@ void writeTime(bool* timeData)
 
 		// Clock and Latch.
 		digitalWrite(clockPin, HIGH);
-		delay(3);
+		delay(10);
 		digitalWrite(clockPin, LOW);
-
-		digitalWrite(latchPin, HIGH);
-		delay(3);
-		digitalWrite(latchPin, LOW);
-
-		// Wait
-		delay(5);
 	}
+
+	// Latch
+	digitalWrite(latchPin, HIGH);
+	delay(10);
+	digitalWrite(latchPin, LOW);
 }
