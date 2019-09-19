@@ -63,3 +63,9 @@ dkms.conf
 *.filters
 NixieClockCode/NixieClock/src/arduino folders read me.txt
 NixieClockCode/.vs/NixieClockCode/v16/.suo
+*.pro
+*.kicad_pcb
+*.sch
+*.dcm
+*.bak
+Schematics/sym-lib-table
